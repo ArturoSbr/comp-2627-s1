@@ -1,6 +1,5 @@
 name: comp
 channels:
-  - defaults
   - conda-forge
 dependencies:
   - python=3.13.15
