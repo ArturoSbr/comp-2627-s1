@@ -27,3 +27,11 @@ semester.
 ├── environment.yml
 └── README.md
 ```
+
+## Participation
+
+Gabriela: I
+Jorge: II
+Neftali: II
+Maria: I
+Ramon: II
