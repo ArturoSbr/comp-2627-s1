@@ -30,8 +30,10 @@ semester.
 
 ## Participation
 
-Gabriela: I
-Jorge: II
+Gabriela: III
+Jorge: III
+Marco: I
 Neftali: II
 Maria: I
-Ramon: II
+Ramon: V
+Ricardo: I
