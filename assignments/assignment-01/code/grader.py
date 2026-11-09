@@ -1,16 +1,14 @@
 import os
 import sys
+import traceback
 import numpy as np
 import pandas as pd
 
 # Ensure working directory is `assignments/assignment-01/code/` so `main.py`
 # can read `../data/*.csv` regardless of where `grader.py` is called from
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
+MAIN_PATH = os.path.join(CODE_DIR, 'main.py')
 os.chdir(CODE_DIR)
-if CODE_DIR not in sys.path:
-    sys.path.insert(0, CODE_DIR)
-
-import main as student  # noqa: E402
 
 
 # ------------------------------ Expected Values ------------------------------
@@ -36,31 +34,51 @@ album_summary_exp = df_exp.groupby('album_name').agg({
 
 # -------------------------------- Assertions ---------------------------------
 
-def check_scalar(actual, expected, name):
+def get_var(student_globals, name):
+    assert name in student_globals, (
+        f'`{name}` was not found (script may have crashed before defining it)'
+    )
+    return student_globals[name]
+
+
+def check_scalar(student_globals, expected, name):
+    actual = get_var(student_globals, name)
     assert not isinstance(actual, bool), f'`{name}` is still a boolean'
     assert np.isclose(actual, expected), (
         f'Expected `{name}` to be {expected}, got {actual}'
     )
 
 
-def grade():
+def grade(student_globals=None):
+    if student_globals is None:
+        student_globals = {}
+        try:
+            print('Executing student code...')
+            with open(MAIN_PATH, 'r', encoding='utf-8') as f:
+                student_code = f.read()
+            exec(student_code, student_globals)
+            print('Execution completed successfully.\n')
+        except Exception as e:
+            print(f'\nExecution encountered an error: {e}')
+            traceback.print_exc(limit=2)
+            print('\nContinuing grading with available variables...\n')
+
     score = 0
     total = 8
 
     # Q1
     try:
-        assert isinstance(student.albums, pd.DataFrame), (
-            '`albums` must be a DataFrame'
-        )
-        assert isinstance(student.songs, pd.DataFrame), (
-            '`songs` must be a DataFrame'
-        )
-        assert isinstance(student.features, pd.DataFrame), (
+        albums = get_var(student_globals, 'albums')
+        songs = get_var(student_globals, 'songs')
+        features = get_var(student_globals, 'features')
+        assert isinstance(albums, pd.DataFrame), '`albums` must be a DataFrame'
+        assert isinstance(songs, pd.DataFrame), '`songs` must be a DataFrame'
+        assert isinstance(features, pd.DataFrame), (
             '`features` must be a DataFrame'
         )
-        pd.testing.assert_frame_equal(student.albums, albums_exp)
-        pd.testing.assert_frame_equal(student.songs, songs_exp)
-        pd.testing.assert_frame_equal(student.features, features_exp)
+        pd.testing.assert_frame_equal(albums, albums_exp)
+        pd.testing.assert_frame_equal(songs, songs_exp)
+        pd.testing.assert_frame_equal(features, features_exp)
         print('Q1: CORRECT (+1)')
         score += 1
     except Exception as e:
@@ -69,7 +87,7 @@ def grade():
     # Q2
     try:
         check_scalar(
-            student.guest_appearances,
+            student_globals,
             guest_appearances_exp,
             'guest_appearances',
         )
@@ -81,7 +99,7 @@ def grade():
     # Q3
     try:
         check_scalar(
-            student.mean_metacritic,
+            student_globals,
             mean_metacritic_exp,
             'mean_metacritic',
         )
@@ -92,7 +110,7 @@ def grade():
 
     # Q4
     try:
-        check_scalar(student.bonus_tracks, bonus_tracks_exp, 'bonus_tracks')
+        check_scalar(student_globals, bonus_tracks_exp, 'bonus_tracks')
         print('Q4: CORRECT (+1)')
         score += 1
     except Exception as e:
@@ -100,10 +118,11 @@ def grade():
 
     # Q5
     try:
-        assert isinstance(student.albums_songs, pd.DataFrame), (
+        albums_songs = get_var(student_globals, 'albums_songs')
+        assert isinstance(albums_songs, pd.DataFrame), (
             '`albums_songs` must be a DataFrame'
         )
-        pd.testing.assert_frame_equal(student.albums_songs, albums_songs_exp)
+        pd.testing.assert_frame_equal(albums_songs, albums_songs_exp)
         print('Q5: CORRECT (+1)')
         score += 1
     except Exception as e:
@@ -111,8 +130,9 @@ def grade():
 
     # Q6
     try:
-        assert isinstance(student.df, pd.DataFrame), '`df` must be a DataFrame'
-        pd.testing.assert_frame_equal(student.df, df_exp)
+        df = get_var(student_globals, 'df')
+        assert isinstance(df, pd.DataFrame), '`df` must be a DataFrame'
+        pd.testing.assert_frame_equal(df, df_exp)
         print('Q6: CORRECT (+1)')
         score += 1
     except Exception as e:
@@ -120,10 +140,11 @@ def grade():
 
     # Q7
     try:
-        assert isinstance(student.mean_tempo, pd.Series), (
+        mean_tempo = get_var(student_globals, 'mean_tempo')
+        assert isinstance(mean_tempo, pd.Series), (
             '`mean_tempo` must be a Series'
         )
-        pd.testing.assert_series_equal(student.mean_tempo, mean_tempo_exp)
+        pd.testing.assert_series_equal(mean_tempo, mean_tempo_exp)
         print('Q7: CORRECT (+1)')
         score += 1
     except Exception as e:
@@ -131,20 +152,23 @@ def grade():
 
     # Q8
     try:
-        assert isinstance(student.album_summary, pd.DataFrame), (
+        album_summary = get_var(student_globals, 'album_summary')
+        assert isinstance(album_summary, pd.DataFrame), (
             '`album_summary` must be a DataFrame'
         )
-        pd.testing.assert_frame_equal(student.album_summary, album_summary_exp)
+        pd.testing.assert_frame_equal(album_summary, album_summary_exp)
         print('Q8: CORRECT (+1)')
         score += 1
     except Exception as e:
         print(f'Q8: FAILED ({e})')
 
-    print(f'\nFINAL SCORE: {score} / {total}')
+    print('\n' + '=' * 80)
+    print(f'FINAL SCORE: {score} / {total}'.center(80))
+    print('=' * 80)
+
     if score < total:
         sys.exit(1)
 
 
 if __name__ == '__main__':
     grade()
-
