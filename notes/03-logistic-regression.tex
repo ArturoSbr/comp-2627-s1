@@ -1,0 +1,239 @@
+% Imports
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{
+  amsmath, amsthm, amssymb
+}
+
+% Begin document
+\setlength{\parindent}{0pt}
+\begin{document}
+
+% Title
+\title{Econometrics II Workshop: Logistic Regression}
+\author{Arturo Soberon}
+\date{}
+\maketitle
+
+% Main
+\setcounter{section}{0}
+
+\section{The Setup: Modeling Default as a Bernoulli Outcome}
+
+Suppose you work at a bank or fintech deciding whether to approve a loan
+application. For each historical borrower $i$, we observe a binary outcome
+$y_i \in \{0, 1\}$, where $y_i = 1$ means the borrower defaulted (didn't pay)
+and $y_i = 0$ means they repaid on time.
+
+If every applicant had the exact same fixed probability of default $p$, then
+$y_i \sim \text{Bernoulli}(p)$, with probability mass function:
+\begin{equation}
+    P(Y_i = y_i) = p^{y_i}(1 - p)^{1 - y_i}
+\end{equation}
+
+\section{Conditioning on Borrower Characteristics}
+
+Predicting a fixed default probability $p$ for everyone isn't useful---it
+treats every applicant like a weighted coin flip with the exact same
+probability $p$, ignoring who is actually applying. Instead, we observe a
+$p \times 1$ vector of borrower characteristics $x_i$ (income, debt-to-income
+ratio, credit bureau score, past delinquencies, plus an intercept) and want to
+estimate each applicant's conditional probability of default:
+\begin{equation}
+    p_i = P(Y_i = 1 \mid x_i)
+\end{equation}
+
+\section{Why Not a Linear Probability Model?}
+
+The most direct approach is to model default risk linearly: $p_i = x_i^\top \beta$.
+The problem is that $x_i^\top \beta$ maps to the entire real line
+$(-\infty, \infty)$, whereas a probability of default must live strictly inside
+$[0, 1]$. Even ignoring heteroskedasticity, a model that tells your credit
+committee an applicant has a $-15\%$ or $125\%$ chance of defaulting breaks
+down as soon as you try to price risk or set an approval cutoff.
+
+\section{The Sigmoid Function}
+
+To keep our risk estimates well-behaved, we take our linear risk score
+$z_i = x_i^\top \beta \in \mathbb{R}$ and pass it through a link function
+that bounds the range of the output between $0$ and $1$, just the way a
+probability should behave. In logistic regression, we use the \textbf{sigmoid}
+(or logistic) function:
+\begin{equation}
+    \sigma(z) = \frac{1}{1 + e^{-z}}
+\end{equation}
+Setting $\hat{p}_i = \sigma(x_i^\top \beta)$ guarantees that every applicant's
+predicted default probability lies strictly between $0$ and $1$.
+
+\section{Sigmoid Function Properties}
+
+This list is not exhaustive; it only covers the properties that will be useful
+later in the lecture:
+\begin{enumerate}
+    \item \textbf{Range:} $\sigma: \mathbb{R} \to (0, 1)$, with
+    $\lim_{z \to \infty} \sigma(z) = 1$ (near-certain default) and
+    $\lim_{z \to -\infty} \sigma(z) = 0$ (near-zero default risk).
+    \item \textbf{Symmetry:} $\sigma(z) = 1 - \sigma(-z)$, which cleanly links
+    the probability of default to the probability of repayment.
+    \item \textbf{Derivative:} $\sigma'(z) = \sigma(z)\bigl(1 - \sigma(z)\bigr)$.
+\end{enumerate}
+
+\textit{Quick check on Property 3:} Write $\sigma(z) = (1 + e^{-z})^{-1}$ and
+apply the chain rule:
+\begin{align}
+    \sigma'(z) &= -(1 + e^{-z})^{-2}(-e^{-z}) \nonumber \\
+               &= \frac{1}{1 + e^{-z}} \cdot \frac{e^{-z}}{1 + e^{-z}} \nonumber \\
+               &= \sigma(z)\bigl(1 - \sigma(z)\bigr)
+\end{align}
+
+\section{Likelihood of the Loan Portfolio}
+
+Given an i.i.d.\ historical dataset of $n$ loans $\{(x_i, y_i)\}_{i=1}^n$, the
+joint likelihood of observing our portfolio's repayment outcomes as a function
+of $\beta$ is the product of $n$ independent Bernoulli trials:
+\begin{equation}
+    \mathcal{L}(\beta) = \prod_{i=1}^n \hat{p}_i^{y_i} (1 - \hat{p}_i)^{1 - y_i},
+    \quad \text{where } \hat{p}_i = \sigma(x_i^\top \beta)
+\end{equation}
+
+\section{Negative Log-Likelihood}
+
+Taking the natural log turns the product across $n$ borrowers into a sum. As
+you saw in Microeconomics, applying a strictly monotonic transformation ($\ln$)
+preserves the argmax of an optimization problem---so maximizing
+$\ln \mathcal{L}(\beta)$ gives the exact same $\hat{\beta}$ as maximizing
+$\mathcal{L}(\beta)$. More importantly for computation, multiplying thousands
+of probabilities in $(0, 1)$ produces a number so tiny that a computer rounds
+it straight to zero (floating-point underflow).
+
+Flipping the sign turns maximization into a standard minimization problem, and
+dividing by $n$ gives our average negative log-likelihood (or binary
+cross-entropy) objective function $J(\beta)$:
+\begin{equation}
+    J(\beta) = -\frac{1}{n} \ln \mathcal{L}(\beta)
+             = -\frac{1}{n} \sum_{i=1}^n
+               \Big[ y_i \ln(\hat{p}_i) + (1 - y_i) \ln(1 - \hat{p}_i) \Big]
+\end{equation}
+
+Think of $J(\beta)$ as a disutility or misery function that sets up the
+computer's incentives: it gets penalized heavily whenever it assigns a low
+default probability to someone who actually defaulted ($y_i = 1$), or a high
+default probability to someone who paid on time ($y_i = 0$). To minimize its
+misery, the algorithm is forced to push $\hat{p}_i$ toward $1$ for defaulters
+and toward $0$ for reliable borrowers.
+
+\section{Gradient Descent}
+
+Unlike OLS, setting $\nabla_\beta J(\beta) = 0$ yields no closed-form
+analytical solution because $\hat{p}_i$ is nonlinear in $\beta$. Fortunately,
+$J(\beta)$ is globally convex---shaped like a smooth, multidimensional bowl
+with a single lowest point---so we can reach the global minimum numerically
+using \textbf{Gradient Descent}.
+
+First, what is the gradient $\nabla_\beta J(\beta)$? It is simply the vector of
+partial derivatives of our misery function with respect to each parameter:
+\begin{equation}
+    \nabla_\beta J(\beta) =
+    \begin{bmatrix}
+        \dfrac{\partial J}{\partial \beta_1} &
+        \dfrac{\partial J}{\partial \beta_2} &
+        \cdots &
+        \dfrac{\partial J}{\partial \beta_p}
+    \end{bmatrix}^\top
+\end{equation}
+Each entry tells you how much $J(\beta)$ changes if you nudge that specific
+$\beta_j$ slightly upward. Put together into a single vector,
+$\nabla_\beta J(\beta)$ always points in the direction of \textbf{steepest
+ascent}---the direction in parameter space where our misery increases the
+fastest.
+
+Since we want to \emph{minimize} $J(\beta)$, we walk in the exact opposite
+direction ($-\nabla_\beta J(\beta)$). Starting from an initial guess
+$\beta^{(0)}$ and choosing a step size (learning rate) $\alpha > 0$, we
+iteratively update our parameters:
+\begin{equation}
+    \beta^{(t+1)} = \beta^{(t)} - \alpha \nabla_\beta J(\beta^{(t)})
+\end{equation}
+
+Notice why this update rule gradually settles into the minimum:
+\begin{itemize}
+    \item \textbf{Sign check (1D intuition):} Suppose we only have one
+    parameter $\beta_1$. If the slope $\frac{\partial J}{\partial \beta_1} > 0$,
+    increasing $\beta_1$ makes things worse, so subtracting
+    $\alpha \frac{\partial J}{\partial \beta_1}$ pushes $\beta_1$ to the left
+    (downhill). If $\frac{\partial J}{\partial \beta_1} < 0$, subtracting a
+    negative number pushes $\beta_1$ to the right (also downhill).
+    \item \textbf{Natural braking:} When we are far from the bottom of the
+    bowl, the slope is steep, so the gradient is large and we take big steps.
+    As we approach the minimum, the surface flattens out and
+    $\nabla_\beta J(\beta^{(t)}) \to 0$, meaning our steps automatically get
+    smaller until the updates stop moving.
+\end{itemize}
+
+\section{Deriving the Gradient}
+
+To execute that loop, we just need $\nabla_\beta J(\beta)$. Start with a single
+borrower $i$, letting
+\begin{equation}
+    \ell_i(\beta) = -\Big[ y_i \ln(\hat{p}_i) + (1 - y_i) \ln(1 - \hat{p}_i) \Big]
+\end{equation}
+where $\hat{p}_i = \sigma(z_i)$ and $z_i = x_i^\top \beta$. Apply the chain rule:
+\begin{equation}
+    \frac{\partial \ell_i}{\partial \beta}
+    = \frac{\partial \ell_i}{\partial \hat{p}_i}
+      \cdot \frac{\partial \hat{p}_i}{\partial z_i}
+      \cdot \frac{\partial z_i}{\partial \beta}
+\end{equation}
+
+Compute each piece individually:
+\begin{align}
+    \frac{\partial \ell_i}{\partial \hat{p}_i}
+        &= -\left( \frac{y_i}{\hat{p}_i} - \frac{1 - y_i}{1 - \hat{p}_i} \right)
+         = \frac{\hat{p}_i - y_i}{\hat{p}_i(1 - \hat{p}_i)} \\
+    \frac{\partial \hat{p}_i}{\partial z_i}
+        &= \sigma'(z_i) = \hat{p}_i(1 - \hat{p}_i) \\
+    \frac{\partial z_i}{\partial \beta}
+        &= x_i
+\end{align}
+
+Multiply them together---notice how the denominator cancels out cleanly:
+\begin{equation}
+    \frac{\partial \ell_i}{\partial \beta}
+    = \frac{\hat{p}_i - y_i}{\hat{p}_i(1 - \hat{p}_i)}
+      \cdot \hat{p}_i(1 - \hat{p}_i)
+      \cdot x_i
+    = (\hat{p}_i - y_i) x_i
+\end{equation}
+
+Average over all $n$ borrowers:
+\begin{equation}
+    \nabla_\beta J(\beta) = \frac{1}{n} \sum_{i=1}^n (\hat{p}_i - y_i) x_i
+\end{equation}
+
+Stacking the $x_i^\top$ rows into our $n \times p$ design matrix $X$ and
+defining the $n \times 1$ vectors $\hat{p} = \sigma(X\beta)$ and $y$:
+\begin{equation}
+    \nabla_\beta J(\beta) = \frac{1}{n} X^\top (\hat{p} - y)
+\end{equation}
+
+Notice why this formula makes intuitive sense: in historical loan data, we
+don't get to choose $X$ or $y$---those are fixed. The only lever we actually
+control is $\beta$, which determines our predicted probabilities
+$\hat{p} = \sigma(X\beta)$. The term $(\hat{p} - y)$ is simply a measure of the
+prediction error we are making on each borrower, weighted by their observed
+characteristics $X^\top$.
+
+\section{Putting It Together}
+
+Notice how familiar that gradient looks---it has the exact same structure as
+OLS, except predicted default probabilities $\hat{p} = \sigma(X\beta)$ replace
+$X\beta$. At each step $t$, all you need to do is evaluate
+$\hat{p}^{(t)} = \sigma(X\beta^{(t)})$, compute the gradient
+$\frac{1}{n} X^\top (\hat{p}^{(t)} - y)$, and plug it into the update rule to
+get $\beta^{(t+1)}$ until convergence. Once trained, you score a new applicant
+$x_{\text{new}}$ via $\hat{p}_{\text{new}} = \sigma(x_{\text{new}}^\top \hat{\beta})$
+and approve the loan if $\hat{p}_{\text{new}}$ falls below your institution's
+risk threshold.
+
+% End document
+\end{document}
